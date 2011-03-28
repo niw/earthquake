@@ -1,11 +1,20 @@
 Earthquake
 ====
 
-Twitter Client on Terminal with Streaming API.
+Terminal-based Twitter Client with Streaming API.
 
-It supports ruby 1.9 only.
+It supports only Ruby 1.9.
+
+**We need patches that fix the english of the documentation!**
 
 ![http://images.instagram.com/media/2011/03/21/862f3b8d119b4eeb9c52e690a0087f5e_7.jpg](http://images.instagram.com/media/2011/03/21/862f3b8d119b4eeb9c52e690a0087f5e_7.jpg)
+
+Features
+----
+
+* You can use Twitter entirely in your Terminal.
+* You can receive data in real time with Streaming API.
+* You can easily extend by using Ruby.
 
 Install
 ----
@@ -26,7 +35,30 @@ Commands
 
     ⚡ Hello World!
 
-### Searth
+### Show
+
+    ⚡ :status $xx
+
+**$xx** is the alias of tweet id.
+
+### Delete
+
+    ⚡ :delete $xx
+
+### Reply
+
+    ⚡ :reply $xx hi!
+
+### Retweet
+
+    ⚡ :retweet $xx
+
+### Timeline
+
+    ⚡ :recent
+    ⚡ :recent jugyo
+
+### Search
 
     ⚡ :search #ruby
 
@@ -51,7 +83,7 @@ And there are more commands!
 Customize
 ----
 
-The config file is '~/.earthquake/config'.
+The config file is **~/.earthquake/config**.
 
 ### Changing the colors
 
@@ -59,18 +91,12 @@ The config file is '~/.earthquake/config'.
 
 The blue is excluded.
 
-### Running on debug mode
-
-    Earthquake.config[:debug] = true
-
-デバッグモードで動作しているとき、コードの修正は即座に反映される（正確にはコマンドの実行の直前にリロードされる）。
-
 Plugin
 ----
 
-"~/.earthquake/plugin" is the directory for plugins.
-At launch, Earthquake try to load files under the directory.
-プラグインの初期化処理は Earthquake.init のブロックの中で行うべきである。
+**~/.earthquake/plugin** is the directory for plugins.
+At launch, Earthquake tries to load files under this directory.
+The block that is specified for Earthquake.init will be reloaded at any command line input.
 
 ### Defining your commands
 
@@ -107,7 +133,7 @@ The 'm' is a MatchData.
 
     Earthquake.init do
       output do |item|
-        next unless item["stream"]
+        next unless item["_stream"]
         if item["text"] =~ /ruby/i
           notify "#{item["user"]["screen_name"]}: #{item["text"]}"
         end
@@ -131,7 +157,7 @@ The 'm' is a MatchData.
 
     Earthquake.init do
       filter do |item|
-        if item["stream"] && item["text"]
+        if item["_stream"] && item["text"]
           item["text"] =~ /ruby/i
         else
           true
@@ -143,20 +169,16 @@ The 'm' is a MatchData.
 
     Earthquake.init do
       completion do |text|
-        ['@jugyo', 'earthquake', '#eqrb'].grep(/^#{Regexp.quote(text)}/)
+        ['jugyo', 'earthquake', '#eqrb'].grep(/^#{Regexp.quote(text)}/)
       end
     end
 
 TODO
 ----
 
-* unescape html
-* dealing direct messages
 * more intelligent completion
-* caching statuses
-* typable id
-* request asynchronously
 * spec
+* change the config dir by ARGV
 
 Copyright
 ----

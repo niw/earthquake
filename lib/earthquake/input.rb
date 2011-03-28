@@ -1,4 +1,6 @@
 # encoding: UTF-8
+require 'set'
+
 module Earthquake
   module Input
     def commands
@@ -6,7 +8,7 @@ module Earthquake
     end
 
     def command_names
-      @command_names ||= []
+      @command_names ||= Set.new
     end
 
     def completions
@@ -19,9 +21,18 @@ module Earthquake
 
     def input(text)
       begin
-        reload if config[:debug]
-        if command = commands.detect { |c| c[:pattern] =~ text }
-          command[:block].call($~)
+        reload
+      rescue Exception => e
+        error e
+      end
+
+      begin
+        text = text.gsub(/\$\w+/) do |var|
+          var2id(var) || var
+        end
+
+        if command = command(text)
+          command[:block].call(command[:pattern].match(text))
         elsif !text.empty?
           puts "Command not found".c(43)
         end
@@ -44,11 +55,12 @@ module Earthquake
         command_names << ":#{options[:as]}" if options[:as]
         commands << {:pattern => pattern, :block => block}
       else
-        commands.detect { |c| c[:name] == name }
+        commands.detect {|c| c[:pattern] =~ pattern}
       end
     end
 
     def confirm(message, type = :y)
+      message = message.c(36)
       case type
       when :y
         print "#{message} [Yn] "
@@ -64,9 +76,10 @@ module Earthquake
 
   init do
     commands.clear
+    command_names.clear
     completions.clear
 
-    Readline.basic_word_break_characters = " \t\n\"\\'`$><=;|&{("
+    Readline.basic_word_break_characters = " \t\n\"\\'`$><=;|&{(@"
 
     Readline.completion_proc = lambda do |text|
       completions.inject([]) do |results, completion|

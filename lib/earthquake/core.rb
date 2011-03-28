@@ -3,7 +3,9 @@ require 'fileutils'
 
 module Earthquake
   module Core
-    attr_accessor :config
+    def config
+      @config ||= {}
+    end
 
     def item_queue
       @item_queue ||= []
@@ -40,17 +42,18 @@ module Earthquake
       loaded = ActiveSupport::Dependencies.loaded.dup
       ActiveSupport::Dependencies.clear
       loaded.each { |lib| require_dependency lib }
+    ensure
       _init
     end
 
     def load_config
       # TODO: parse argv
-      self.config = {
+      config.merge!(
         :dir             => File.expand_path('~/.earthquake'),
         :plugin_dir      => File.expand_path('~/.earthquake/plugin'),
         :consumer_key    => 'RmzuwQ5g0SYObMfebIKJag',
         :consumer_secret => 'V98dYYmWm9JoG7qfOF0jhJaVEVW3QhGYcDJ9JQSXU'
-      }
+      )
 
       [config[:dir], config[:plugin_dir]].each do |dir|
         unless File.exists?(dir)
@@ -87,7 +90,9 @@ module Earthquake
       EventMachine::run do
         Thread.start do
           while buf = Readline.readline("⚡ ", true)
-            Readline::HISTORY.pop if buf.empty?
+            unless Readline::HISTORY.count == 1
+              Readline::HISTORY.pop if buf.empty? || Readline::HISTORY[-1] == Readline::HISTORY[-2]
+            end
             sync { input(buf.strip) }
           end
         end

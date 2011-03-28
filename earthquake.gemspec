@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = %q{earthquake}
-  s.version = "0.4.4"
+  s.version = "0.5.0"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["jugyo"]
-  s.date = %q{2011-03-21}
+  s.date = %q{2011-03-28}
   s.default_executable = %q{earthquake}
   s.description = %q{Twitter Client on Terminal with Twitter Streaming API.}
   s.email = %q{jugyo.org@gmail.com}
@@ -35,6 +35,7 @@ Gem::Specification.new do |s|
     "lib/earthquake/core.rb",
     "lib/earthquake/ext.rb",
     "lib/earthquake/get_access_token.rb",
+    "lib/earthquake/id_var.rb",
     "lib/earthquake/input.rb",
     "lib/earthquake/output.rb",
     "lib/earthquake/twitter.rb",
@@ -58,6 +59,7 @@ Accordingly that, You should renew the access token if it is old.
 
 }
   s.require_paths = ["lib"]
+  s.required_ruby_version = Gem::Requirement.new(">= 1.9.1")
   s.rubygems_version = %q{1.6.0}
   s.summary = %q{Twitter Client on Terminal.}
   s.test_files = [
@@ -77,7 +79,7 @@ Accordingly that, You should renew the access token if it is old.
       s.add_runtime_dependency(%q<launchy>, [">= 0"])
       s.add_runtime_dependency(%q<oauth>, [">= 0"])
       s.add_runtime_dependency(%q<twitter_oauth>, [">= 0"])
-      s.add_runtime_dependency(%q<termcolor>, [">= 0"])
+      s.add_runtime_dependency(%q<ruby-growl>, [">= 0"])
       s.add_development_dependency(%q<rspec>, ["~> 2.3.0"])
       s.add_development_dependency(%q<bundler>, ["~> 1.0.0"])
       s.add_development_dependency(%q<jeweler>, ["~> 1.5.2"])
@@ -90,7 +92,7 @@ Accordingly that, You should renew the access token if it is old.
       s.add_dependency(%q<launchy>, [">= 0"])
       s.add_dependency(%q<oauth>, [">= 0"])
       s.add_dependency(%q<twitter_oauth>, [">= 0"])
-      s.add_dependency(%q<termcolor>, [">= 0"])
+      s.add_dependency(%q<ruby-growl>, [">= 0"])
       s.add_dependency(%q<rspec>, ["~> 2.3.0"])
       s.add_dependency(%q<bundler>, ["~> 1.0.0"])
       s.add_dependency(%q<jeweler>, ["~> 1.5.2"])
@@ -104,7 +106,7 @@ Accordingly that, You should renew the access token if it is old.
     s.add_dependency(%q<launchy>, [">= 0"])
     s.add_dependency(%q<oauth>, [">= 0"])
     s.add_dependency(%q<twitter_oauth>, [">= 0"])
-    s.add_dependency(%q<termcolor>, [">= 0"])
+    s.add_dependency(%q<ruby-growl>, [">= 0"])
     s.add_dependency(%q<rspec>, ["~> 2.3.0"])
     s.add_dependency(%q<bundler>, ["~> 1.0.0"])
     s.add_dependency(%q<jeweler>, ["~> 1.5.2"])

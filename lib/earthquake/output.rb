@@ -20,18 +20,19 @@ module Earthquake
         return if item_queue.empty?
         insert do
           while item = item_queue.shift
-            item["stream"] = true
-            puts_items(item) if filters.all? { |filter| filter.call(item) }
+            item["_stream"] = true
+            puts_items(item)
           end
         end
       end
     end
 
     def puts_items(items)
-      [items].flatten.each do |item|
-        outputs.each do |p|
+      [items].flatten.reverse_each do |item|
+        next if filters.any? { |f| f.call(item) == false }
+        outputs.each do |o|
           begin
-            p.call(item)
+            o.call(item)
           rescue => e
             error e
           end
@@ -62,33 +63,36 @@ module Earthquake
 
   init do
     outputs.clear
+    filters.clear
 
     config[:colors] ||= (31..36).to_a + (91..96).to_a
 
     output do |item|
       next unless item["text"]
 
+      info = []
       if item["in_reply_to_status_id"]
-        misc = " (reply to #{item["in_reply_to_status_id"]})"
+        info << "(reply to #{id2var(item["in_reply_to_status_id"])})"
       elsif item["retweeted_status"]
-        misc = " (retweet of #{item["retweeted_status"]["id"]})"
-      else
-        misc = ""
+        info << "(retweet of #{id2var(item["retweeted_status"]["id"])})"
+      end
+      info << Time.parse(item["created_at"]).strftime('%m/%d/%y %H:%M %p')
+      if item["_detail"] && item["source"]
+        info << (item["source"].u =~ />(.*)</ ? $1 : 'web')
       end
 
-      statuses = ["[#{item["id"].to_s}]"]
-      unless item["stream"]
-        statuses.insert(0, "[#{Time.parse(item["created_at"]).strftime('%Y.%m.%d %X')}]")
-      end
+      id = id2var(item["id"])
 
-      source = item["source"] =~ />(.*)</ ? $1 : 'web'
-      user_color = color_of(item["user"]["screen_name"])
-      text = item["text"].gsub(/[@#]([0-9A-Za-z_]+)/) do |i|
+      text = item["text"].u
+      text.gsub!(/@([0-9A-Za-z_]+)/) do |i|
         i.c(color_of($1))
       end
+      text.gsub!(/(?:^#([^\s]+))|(?:\s+#([^\s]+))/) do |i|
+        i.c(color_of($1 || $2))
+      end
 
-      if item["highlights"]
-        item["highlights"].each do |h|
+      if item["_highlights"]
+        item["_highlights"].each do |h|
           c = color_of(h).to_i + 10
           text = text.gsub(/#{h}/i) do |i|
             i.c(c)
@@ -96,27 +100,29 @@ module Earthquake
         end
       end
 
-      mark = item["mark"] || ""
+      mark = item["_mark"] || ""
 
       status =  [
-                  "#{mark}#{statuses.join(" ")}".c(90),
-                  "#{item["user"]["screen_name"].c(user_color)}:",
+                  "#{mark}" + "[#{id}]".c(90),
+                  "#{item["user"]["screen_name"].c(color_of(item["user"]["screen_name"]))}:",
                   "#{text}",
-                  "#{misc} #{source}".c(90)
-                ].join(" ")
+                  (item["user"]["protected"] ? "[P]".c(31) : nil),
+                  info.join(' - ').c(90)
+                ].compact.join(" ")
       puts status
     end
 
     output do |item|
       next unless item["event"]
 
+      # TODO: handle 'list_member_added' and 'list_member_removed'
       case item["event"]
       when "follow", "block", "unblock"
-        puts "[#{item["event"]}] #{item["source"]["screen_name"]} => #{item["target"]["screen_name"]}"
+        puts "[#{item["event"]}]".c(42) + " #{item["source"]["screen_name"]} => #{item["target"]["screen_name"]}"
       when "favorite", "unfavorite"
-        puts "[#{item["event"]}] #{item["source"]["screen_name"]} => #{item["target"]["screen_name"]} : #{item["target_object"]["text"]}"
+        puts "[#{item["event"]}]".c(42) + " #{item["source"]["screen_name"]} => #{item["target"]["screen_name"]} : #{item["target_object"]["text"].u}"
       when "delete"
-        puts "[deleted] #{item["delete"]["status"]["id"]}"
+        puts "[deleted]".c(42) + " #{item["delete"]["status"]["id"]}"
       else
         if config[:debug]
           ap item
