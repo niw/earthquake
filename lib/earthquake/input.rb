@@ -3,6 +3,14 @@ require 'set'
 
 module Earthquake
   module Input
+    def input_filters
+      @input_filters ||= []
+    end
+
+    def input_filter(&block)
+      input_filters << block
+    end
+
     def commands
       @commands ||= []
     end
@@ -19,26 +27,26 @@ module Earthquake
       completions << block
     end
 
+    def command_aliases
+      @command_aliases ||= {}
+    end
+
+    def alias_command(name, target)
+      command_aliases[name.to_s] = target.to_s
+    end
+
     def input(text)
-      begin
-        reload
-      rescue Exception => e
-        error e
-      end
+      return if text.empty?
 
-      begin
-        text = text.gsub(/\$\w+/) do |var|
-          var2id(var) || var
-        end
+      input_filters.each { |f| text = f.call(text) }
 
-        if command = command(text)
-          command[:block].call(command[:pattern].match(text))
-        elsif !text.empty?
-          puts "Command not found".c(43)
-        end
-      rescue Exception => e
-        error e
+      if command = command(text)
+        command[:block].call(command[:pattern].match(text))
+      elsif !text.empty?
+        puts "Command not found".c(43)
       end
+    rescue Exception => e
+      error e
     end
 
     def command(pattern, options = {}, &block)
@@ -60,16 +68,28 @@ module Earthquake
     end
 
     def confirm(message, type = :y)
-      message = message.c(36)
       case type
       when :y
-        print "#{message} [Yn] "
-        return !(gets.strip =~ /^n$/i)
+        return !(ask("#{message} [Yn] ".u) =~ /^n$/i)
       when :n
-        print "#{message} [yN] "
-        return !!(gets.strip =~ /^y$/i)
+        return !!(ask("#{message} [yN] ".u) =~ /^y$/i)
       else
         raise "type must be :y or :n"
+      end
+    end
+
+    def ask(message)
+      Readline.readline(message, false)
+    end
+
+    def async_e(&block)
+      async { handle_api_error(&block) }
+    end
+
+    def handle_api_error(&block)
+      result = block.call
+      if result["error"]
+        notify "[ERROR] #{result["error"]}"
       end
     end
   end
@@ -78,13 +98,14 @@ module Earthquake
     commands.clear
     command_names.clear
     completions.clear
+    input_filters.clear
 
     Readline.basic_word_break_characters = " \t\n\"\\'`$><=;|&{(@"
 
     Readline.completion_proc = lambda do |text|
       completions.inject([]) do |results, completion|
         begin
-          results + (completion.call(text) || [])
+          results | (completion.call(text) || [])
         rescue Exception => e
           error e
           results
@@ -93,9 +114,30 @@ module Earthquake
     end
 
     completion do |text|
-      if Readline.line_buffer =~ /^\s*#{Regexp.quote(text)}/
-        command_names.grep /^#{Regexp.quote(text)}/
+      regexp = /^#{Regexp.quote(text)}/
+      results = (command_names + command_aliases.keys).grep(regexp)
+      history = Readline::HISTORY.reverse_each.take(config[:history_size]) | @tweets_for_completion
+      history.inject(results){|r, line|
+        r | line.split.grep(regexp)
+      }
+    end
+
+    @tweets_for_completion ||= []
+
+    output do |item|
+      next unless item["text"]
+      @tweets_for_completion << [item["user"]["screen_name"], item["text"]].join(" ")
+      @tweets_for_completion.shift if @tweets_for_completion.size > config[:history_size]
+    end
+
+    input_filter do |text|
+      if text =~ %r|^(:\w+)|
+        if target = command_aliases[$1]
+          text = text.sub(%r|^:\w+|, target)
+        end
+        text = text.gsub(/\$\w+/) { |var| var2id(var) || var }
       end
+      text
     end
   end
 

@@ -7,8 +7,8 @@ gem 'activesupport'
 gem 'awesome_print'
 gem 'launchy'
 gem 'oauth'
-gem 'twitter_oauth'
-gem 'ruby-growl'
+gem 'twitter_oauth', '0.4.3'
+gem 'slop'
 
 group :development do
   gem "rspec", "~> 2.3.0"

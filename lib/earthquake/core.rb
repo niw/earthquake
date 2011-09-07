@@ -42,18 +42,22 @@ module Earthquake
       loaded = ActiveSupport::Dependencies.loaded.dup
       ActiveSupport::Dependencies.clear
       loaded.each { |lib| require_dependency lib }
+    rescue Exception => e
+      error e
     ensure
       _init
     end
 
     def load_config
-      # TODO: parse argv
-      config.merge!(
-        :dir             => File.expand_path('~/.earthquake'),
-        :plugin_dir      => File.expand_path('~/.earthquake/plugin'),
-        :consumer_key    => 'RmzuwQ5g0SYObMfebIKJag',
-        :consumer_secret => 'V98dYYmWm9JoG7qfOF0jhJaVEVW3QhGYcDJ9JQSXU'
-      )
+      config[:dir]              ||= File.expand_path('~/.earthquake')
+      config[:time_format]      ||= Time::DATE_FORMATS[:short]
+      config[:plugin_dir]       ||= File.join(config[:dir], 'plugin')
+      config[:file]             ||= File.join(config[:dir], 'config')
+      config[:prompt]           ||= '⚡ '
+      config[:consumer_key]     ||= 'RmzuwQ5g0SYObMfebIKJag'
+      config[:consumer_secret]  ||= 'V98dYYmWm9JoG7qfOF0jhJaVEVW3QhGYcDJ9JQSXU'
+      config[:output_interval]  ||= 1
+      config[:history_size]     ||= 1000
 
       [config[:dir], config[:plugin_dir]].each do |dir|
         unless File.exists?(dir)
@@ -61,13 +65,11 @@ module Earthquake
         end
       end
 
-      config[:file] ||= File.join(config[:dir], 'config')
-
-      unless File.exists?(config[:file])
+      if File.exists?(config[:file])
+        load config[:file]
+      else
         File.open(config[:file], 'w')
       end
-
-      load config[:file]
 
       get_access_token unless self.config[:token] && self.config[:secret]
     end
@@ -82,35 +84,48 @@ module Earthquake
       end
     end
 
-    def start(*argv)
-      _once
+    def __init(options)
+      config.merge!(options)
       _init
+      _once
+    end
+
+    def invoke(command, options = {})
+      __init(options)
+      input(command)
+    end
+
+    def start(options = {})
+      __init(options)
       restore_history
 
       EventMachine::run do
         Thread.start do
-          while buf = Readline.readline("⚡ ", true)
+          while buf = Readline.readline(config[:prompt], true)
             unless Readline::HISTORY.count == 1
               Readline::HISTORY.pop if buf.empty? || Readline::HISTORY[-1] == Readline::HISTORY[-2]
             end
-            sync { input(buf.strip) }
+            sync {
+              reload
+              store_history
+              input(buf.strip)
+            }
           end
+          stop
         end
 
         Thread.start do
           loop do
             if Readline.line_buffer.nil? || Readline.line_buffer.empty?
               sync { output }
-              sleep 1
-            else
-              sleep 2
             end
+            sleep config[:output_interval]
           end
         end
 
         reconnect
 
-        trap('TERM') { stop }
+        trap('INT') { stop }
       end
     end
 
@@ -124,7 +139,8 @@ module Earthquake
 
       options = {
         :oauth => config.slice(:consumer_key, :consumer_secret).merge(
-          :access_key => config[:token], :access_secret => config[:secret]
+          :access_key => config[:token], :access_secret => config[:secret],
+          :proxy => ENV['http_proxy']
         )
       }.merge(options)
 
@@ -154,11 +170,10 @@ module Earthquake
     def stop
       stop_stream
       EventMachine.stop_event_loop
-      store_history
     end
 
     def store_history
-      history_size = config[:history_size] || 1000
+      history_size = config[:history_size]
       File.open(File.join(config[:dir], 'history'), 'w') do |file|
         lines = Readline::HISTORY.to_a[([Readline::HISTORY.size - history_size, 0].max)..-1]
         file.print(lines.join("\n"))
@@ -167,8 +182,14 @@ module Earthquake
 
     def restore_history
       history_file = File.join(config[:dir], 'history')
-      if File.exists?(history_file)
-        File.read(history_file).split(/\n/).each { |line| Readline::HISTORY << line }
+      begin
+        File.read(history_file, :encoding => "BINARY").
+          encode!(:invalid => :replace, :undef => :replace).
+          split(/\n/).
+          each { |line| Readline::HISTORY << line }
+      rescue Errno::ENOENT
+      rescue Errno::EACCES => e
+        error(e)
       end
     end
 
@@ -183,15 +204,30 @@ module Earthquake
     end
 
     def async(&block)
-      Thread.start(&block)
+      Thread.start do
+        begin
+          block.call
+        rescue Exception => e
+          error e
+        end
+      end
     end
 
     def error(e)
       notify "[ERROR] #{e.message}\n#{e.backtrace.join("\n")}"
     end
 
-    def notify(message, options = {:title => 'earthquake'})
-      Notify.notify options[:title], message
+    def notify(message, options = {})
+      args = {:title => 'earthquake'}.update(options)
+      title = args.delete(:title)
+      message = message.is_a?(String) ? message : message.inspect
+      # FIXME: Escaping should be done at Notify.notify
+      Notify.notify title, message.e
+    end
+    alias_method :n, :notify
+
+    def browse(url)
+      Launchy.open(url)
     end
   end
 

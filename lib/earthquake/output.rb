@@ -1,23 +1,25 @@
 # encoding: UTF-8
+require 'stringio'
+
 module Earthquake
   module Output
-    def filters
-      @filters ||= []
+    def output_filters
+      @output_filters ||= []
     end
 
-    def filter(&block)
-      filters << block
+    def output_filter(&block)
+      output_filters << block
     end
 
     def outputs
       @outputs ||= []
     end
 
-    def output(&block)
+    def output(name = nil, &block)
       if block
-        outputs << block
+        outputs.delete_if { |o| o[:name] == name } if name
+        outputs << {:name => name, :block => block}
       else
-        return if item_queue.empty?
         insert do
           while item = item_queue.shift
             item["_stream"] = true
@@ -29,10 +31,10 @@ module Earthquake
 
     def puts_items(items)
       [items].flatten.reverse_each do |item|
-        next if filters.any? { |f| f.call(item) == false }
+        next if output_filters.any? { |f| f.call(item) == false }
         outputs.each do |o|
           begin
-            o.call(item)
+            o[:block].call(item)
           rescue => e
             error e
           end
@@ -41,33 +43,39 @@ module Earthquake
     end
 
     def insert(*messages)
-      clear_line
-      puts messages unless messages.empty?
-      yield if block_given?
-    ensure
-      Readline.refresh_line
-    end
+      $stdout = StringIO.new
 
-    def clear_line
-      print "\e[0G" + "\e[K"
+      puts messages
+      yield if block_given?
+
+      unless $stdout.string.empty?
+        STDOUT.print "\e[0G\e[K#{$stdout.string}"
+        Readline.refresh_line
+      end
+    ensure
+      $stdout = STDOUT
     end
 
     def color_of(screen_name)
-      colors[screen_name.to_i(36) % colors.size]
-    end
-
-    def colors
-      config[:colors]
+      config[:colors][screen_name.delete("^0-9A-Za-z_").to_i(36) % config[:colors].size]
     end
   end
 
   init do
     outputs.clear
-    filters.clear
+    output_filters.clear
 
     config[:colors] ||= (31..36).to_a + (91..96).to_a
+    config[:color] ||= {}
+    config[:color].reverse_merge!(
+      :info   => 90,
+      :notice => 31,
+      :event  => 42,
+      :url    => [4, 36]
+    )
+    config[:raw_text] ||= false
 
-    output do |item|
+    output :tweet do |item|
       next unless item["text"]
 
       info = []
@@ -76,53 +84,65 @@ module Earthquake
       elsif item["retweeted_status"]
         info << "(retweet of #{id2var(item["retweeted_status"]["id"])})"
       end
-      info << Time.parse(item["created_at"]).strftime('%m/%d/%y %H:%M %p')
-      if item["_detail"] && item["source"]
+      if !config[:hide_time] && item["created_at"]
+        info << Time.parse(item["created_at"]).strftime(config[:time_format])
+      end
+      if !config[:hide_app_name] && item["source"]
         info << (item["source"].u =~ />(.*)</ ? $1 : 'web')
       end
 
       id = id2var(item["id"])
 
-      text = item["text"].u
-      text.gsub!(/@([0-9A-Za-z_]+)/) do |i|
-        i.c(color_of($1))
-      end
-      text.gsub!(/(?:^#([^\s]+))|(?:\s+#([^\s]+))/) do |i|
-        i.c(color_of($1 || $2))
-      end
+      text = (item["retweeted_status"] && item["truncated"] ? "RT @#{item["retweeted_status"]["user"]["screen_name"]}: #{item["retweeted_status"]["text"]}" : item["text"]).u
+      text.gsub!(/\s+/, ' ') unless config[:raw_text]
+      text = text.coloring(/@[0-9A-Za-z_]+/) { |i| color_of(i) }
+      text = text.coloring(/(^#[^\s]+)|(\s+#[^\s]+)/) { |i| color_of(i) }
+      text = text.coloring(URI.regexp(["http", "https"]), :url)
 
       if item["_highlights"]
         item["_highlights"].each do |h|
-          c = color_of(h).to_i + 10
-          text = text.gsub(/#{h}/i) do |i|
-            i.c(c)
-          end
+          color = config[:color][:highlight].nil? ? color_of(h).to_i + 10 : :highlight
+          text = text.coloring(/#{h}/i, color)
         end
       end
 
       mark = item["_mark"] || ""
 
       status =  [
-                  "#{mark}" + "[#{id}]".c(90),
+                  "#{mark}" + "[#{id}]".c(:info),
                   "#{item["user"]["screen_name"].c(color_of(item["user"]["screen_name"]))}:",
                   "#{text}",
-                  (item["user"]["protected"] ? "[P]".c(31) : nil),
-                  info.join(' - ').c(90)
+                  (item["user"]["protected"] ? "[P]".c(:notice) : nil),
+                  info.join(' - ').c(:info)
                 ].compact.join(" ")
       puts status
     end
 
-    output do |item|
+    output :delete do |item|
+      if item["delete"] && cache.read("status:#{item["delete"]["status"]["id"]}")
+        tweet = twitter.status(item["delete"]["status"]["id"])
+        tweet["_mark"] = "[deleted]".c(:event) + ' '
+        puts_items tweet
+      end
+    end
+
+    output :direct_message do |item|
+      next unless dm = item["direct_message"]
+      puts "[direct message]".c(:event) +
+           " #{dm["sender"]["screen_name"]} => #{dm["recipient"]["screen_name"]}: #{dm["text"]}"
+    end
+
+    output :event do |item|
       next unless item["event"]
 
-      # TODO: handle 'list_member_added' and 'list_member_removed'
+      print "[#{item["event"]}]".c(:event) + " "
       case item["event"]
       when "follow", "block", "unblock"
-        puts "[#{item["event"]}]".c(42) + " #{item["source"]["screen_name"]} => #{item["target"]["screen_name"]}"
+        puts "#{item["source"]["screen_name"]} => #{item["target"]["screen_name"]}"
       when "favorite", "unfavorite"
-        puts "[#{item["event"]}]".c(42) + " #{item["source"]["screen_name"]} => #{item["target"]["screen_name"]} : #{item["target_object"]["text"].u}"
-      when "delete"
-        puts "[deleted]".c(42) + " #{item["delete"]["status"]["id"]}"
+        puts "#{item["source"]["screen_name"]} => #{item["target"]["screen_name"]} : #{item["target_object"]["text"].u}"
+      when "list_member_added", "list_member_removed"
+        puts "#{item["target_object"]["full_name"]} (#{item["target_object"]["description"]})"
       else
         if config[:debug]
           ap item

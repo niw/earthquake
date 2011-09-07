@@ -1,9 +1,13 @@
 Earthquake
 ====
 
-Terminal-based Twitter Client with Streaming API.
+Terminal-based Twitter Client with Streaming API support.
+Only supports Ruby 1.9.
 
-It supports only Ruby 1.9.
+Homepage: [https://github.com/jugyo/earthquake](https://github.com/jugyo/earthquake)  
+Twitter: [http://twitter.com/earthquakegem](http://twitter.com/earthquakegem)  
+Demo: [http://www.youtube.com/watch?v=S2KtBGrIe5c](http://www.youtube.com/watch?v=S2KtBGrIe5c)  
+Slide: [http://www.slideshare.net/jugyo/earthquakegem](http://www.slideshare.net/jugyo/earthquakegem)  
 
 **We need patches that fix the english of the documentation!**
 
@@ -12,14 +16,18 @@ It supports only Ruby 1.9.
 Features
 ----
 
-* You can use Twitter entirely in your Terminal.
-* You can receive data in real time with Streaming API.
-* You can easily extend by using Ruby.
+* Use Twitter entirely in your Terminal.
+* Receive data in real time with Streaming API.
+* Easily extend using Ruby.
 
 Install
 ----
 
-    gem install earthquake
+    $ gem install earthquake
+
+**Ubuntu:** EventMachine needs the package libssl-dev.
+
+    $ sudo apt-get install libssl-dev
 
 Usage
 ----
@@ -37,17 +45,17 @@ Commands
 
 ### Show
 
-    ⚡ :status $xx
+    ⚡ $xx
 
 **$xx** is the alias of tweet id.
+
+### Reply
+
+    ⚡ $xx hi!
 
 ### Delete
 
     ⚡ :delete $xx
-
-### Reply
-
-    ⚡ :reply $xx hi!
 
 ### Retweet
 
@@ -57,6 +65,10 @@ Commands
 
     ⚡ :recent
     ⚡ :recent jugyo
+
+### Lists
+
+    ⚡ :recent yugui/ruby-committers
 
 ### Search
 
@@ -78,20 +90,79 @@ Commands
 
     ⚡ :restart
 
-And there are more commands!
+### Threads
 
-Customize
+    ⚡ :thread $xx
+
+### Install Plugins
+
+    ⚡ :plugin_install https://gist.github.com/899506
+
+### Alias
+
+    ⚡ :alias rt retweet
+
+And more!
+
+Configuration
 ----
+
+The default earthquake directory is ~/.earthquake.
 
 The config file is **~/.earthquake/config**.
 
-### Changing the colors
+### Changing the earthquake directory
 
+You can change the directory at launch by entering a directory as an argument. For example:
+
+    $ earthquake ~/.earthquake_foo
+
+### Changing the colors for user name
+
+    # ~/.earthquake/config
+    # For example, to exclude blue:
     Earthquake.config[:colors] = (31..36).to_a - [34]
 
-The blue is excluded.
+### Changing the color scheme
 
-Plugin
+    # ~/.earthquake/config
+    Earthquake.config[:color] = {
+      :info => 34,
+      :notice => 41,
+      :event  => 46,
+      :url => [4, 34]
+    }
+
+### Defining aliases
+
+    # ~/.earthquake/config
+    Earthquake.alias_command :rt, :retweet
+
+### HTTP proxy support
+
+Please set environment variable *http_proxy* if you want earthquake to use an http proxy.
+    
+Desktop Notifications
+----
+
+To enable desktop notifications, install one of the following:
+
+* ruby-growl (gem install ruby-growl)
+* growlnotify (http://growl.info/extras.php#growlnotify)
+* notify-send (sudo aptitude install libnotify-bin)
+* libnotify (https://github.com/splattael/libnotify)
+
+Call Earthquake.notify for desktop notification.
+You can try it by using the :eval command:
+
+    ⚡ :eval notify 'Hello World!'
+
+Plugins
+----
+
+See [https://github.com/jugyo/earthquake/wiki](https://github.com/jugyo/earthquake/wiki)
+
+Making Plugins
 ----
 
 **~/.earthquake/plugin** is the directory for plugins.
@@ -116,7 +187,7 @@ The block that is specified for Earthquake.init will be reloaded at any command 
       end
     end
 
-The 'm' is a MatchData.
+'m' is a [http://www.ruby-doc.org/core/classes/MatchData.html](MatchData) object.
 
 #### Using regexp:
 
@@ -151,17 +222,27 @@ The 'm' is a MatchData.
       end
     end
 
-### Defining filters
+### Defining filters for output
 
 #### Filtering by keywords
 
     Earthquake.init do
-      filter do |item|
+      output_filter do |item|
         if item["_stream"] && item["text"]
           item["text"] =~ /ruby/i
         else
           true
         end
+      end
+    end
+
+### Replacing the output for tweets
+
+    Earthquake.init do
+      output :tweet do |item|
+        next unless item["text"]
+        name = item["user"]["screen_name"]
+        puts "#{name.c(color_of(name))}: foo"
       end
     end
 
@@ -176,9 +257,12 @@ The 'm' is a MatchData.
 TODO
 ----
 
-* more intelligent completion
+* mark my tweet
+* Earthquake should parse ARGV
+* ruby1.9nize
+* guideline for plugin
+* deal proxy
 * spec
-* change the config dir by ARGV
 
 Copyright
 ----

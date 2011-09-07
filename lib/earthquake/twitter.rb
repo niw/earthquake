@@ -11,7 +11,8 @@ module Earthquake
       next if item["text"].nil? || item["_disable_cache"]
       item = item.dup
       item.keys.select { |key| key =~ /^_/ }.each { |key| item.delete(key) } # remote optional data like "_stream", "_highlights"
-      Earthquake.cache.write("status:#{item["id"]}", item)
+      cache_key = "status:#{item["id"]}"
+      cache.write(cache_key, item) unless cache.exist?(cache_key)
     end
   end
 
@@ -29,6 +30,24 @@ module Earthquake
           end
         end
         alias_method_chain m, :cache
+      end
+
+      def initialize(options = {})
+        @consumer_key = options[:consumer_key]
+        @consumer_secret = options[:consumer_secret]
+        @token = options[:token]
+        @secret = options[:secret]
+        @proxy = ENV['http_proxy']
+      end
+
+      def consumer
+        options = { :site => 'http://api.twitter.com' }
+        options.update( :proxy => @proxy ) if @proxy
+        @consumer ||= OAuth::Consumer.new(
+          @consumer_key,
+          @consumer_secret,
+          options
+        )
       end
     end
   end
